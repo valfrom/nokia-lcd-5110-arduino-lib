@@ -126,6 +126,21 @@ void lcdClear() {
   }
 }
 
+uint8_t bitScale(uint8_t b, uint8_t shift) {
+  uint8_t i;
+  uint8_t r = 0;
+  for(i = 0; i < 8; i++) {
+    uint8_t bit = i / 2;
+    if(b & (1 << (bit + shift))) {
+      bit = 1;
+    } else {
+      bit = 0;
+    }
+    r |= (bit << i);
+  }
+  return r;
+}
+
 /** Write a single character
  *
  * Display a single ASCII character at the position described by the row and
@@ -140,28 +155,42 @@ void lcdClear() {
  * @param ch  the character to display. If the character is out of range it
  *            will be replaced with the '?' character.
  */
-void lcdPrintChar(uint8_t row, uint8_t col, char ch) {
+void lcdPrintChar(uint8_t row, uint8_t acol, char ch, uint8_t size) {
   // Make sure it is on the screen
-  if((row>=LCD_ROW)||(col>=LCD_COL)) {
+  if((row>=LCD_ROW)||(acol>=LCD_COL)) {
     return;
   }
   // If the character is invalid replace it with the '?'
   if((ch<0x20)||(ch>0x7f)) {
     ch = '?';
   }
-  // Set the starting address
-  lcdCommand(0x80 | col);
-  lcdCommand(0x40 | (row % LCD_ROW));
-  // And send the column data
-  const uint8_t *chdata = SMALL_FONT + ((ch - 0x20) * 5);
-  uint8_t pixels;
-  for(pixels = 0; (pixels < DATA_WIDTH) && (col < LCD_COL); pixels++, col++, chdata++) {
-    uint8_t data = pgm_read_byte_near(chdata);
-    lcdData(data);
-  }
-  // Add the padding byte
-  if(col < LCD_COL) {
-    lcdData(CLEAR_BYTE);
+  
+  uint8_t i;
+  for(i = 0; i < size; i++) {
+    uint8_t col = acol;
+    // Set the starting address
+    lcdCommand(0x80 | col);
+    lcdCommand(0x40 | ((row + i) % LCD_ROW));
+    // And send the column data
+    const uint8_t *chdata = SMALL_FONT + ((ch - 0x20) * 5);
+    uint8_t pixels;
+
+    for(pixels = 0; (pixels < DATA_WIDTH) && (col < LCD_COL); pixels++, col++, chdata++) {
+      uint8_t data = pgm_read_byte_near(chdata);
+
+      if(size != 2) {
+        lcdData(data);
+        continue;
+      }
+      data = bitScale(data, i * 4);
+      lcdData(data);
+      lcdData(data);
+    }
+
+    // Add the padding byte
+    if(col < LCD_COL) {
+      lcdData(CLEAR_BYTE);
+    }
   }
 }
 
@@ -182,9 +211,9 @@ void lcdPrintChar(uint8_t row, uint8_t col, char ch) {
  * @param str the string to display. If a character in the string is out of
  *            range it will be replaced with the '?' character.
  */
-void lcdPrint(uint8_t row, uint8_t col, const char *str) {
-  for(;(*str!='\0')&&(col<LCD_COL);col+=CHAR_WIDTH,str++) {
-    lcdPrintChar(row, col, *str);
+void lcdPrint(uint8_t row, uint8_t col, const char *str, uint8_t size) {
+  for(;(*str!='\0')&&(col<LCD_COL);col+=CHAR_WIDTH*size,str++) {
+    lcdPrintChar(row, col, *str, size);
   }
 }
 
